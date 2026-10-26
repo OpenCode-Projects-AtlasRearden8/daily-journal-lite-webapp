@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Daily Journal Lite: ADHD-friendly, offline, no-guilt journaling. Two-tap mood and energy logging, optional one-line check-ins, streak-free history, plain-word search, a gentle weekly summary, and CSV export. All data stays in localStorage.">
+<title>Daily Journal Lite — two-tap journaling without the guilt</title>
+<style>
+  :root{
+    --bg:#faf7f2; --panel:#fffdf9; --ink:#3c352e; --muted:#7a7067;
+    --line:#e8e1d6; --accent:#2f5d3a; --accent-soft:#e4efe4;
+    --danger:#b3564e;
+    --m1:#c96f6f; --m2:#d99a6c; --m3:#d9c36c; --m4:#8fbf8f; --m5:#6fb5a8;
+    --e1:#8d7bb5; --e2:#9aa7d0; --e3:#79a8c9; --e4:#5fb0c9;
+    --chip-ink:#2c2620;
+    --shadow:0 2px 10px rgba(60,53,46,.07);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#211d19; --panel:#2a251f; --ink:#ece5da; --muted:#a89d90;
+      --line:#3d372f; --accent:#9cc4a2; --accent-soft:#324034;
+      --danger:#d98a82;
+      --m1:#d98a8a; --m2:#e0ab7d; --m3:#d8c47e; --m4:#94c694; --m5:#7cc2b4;
+      --e1:#9d8dc7; --e2:#a7b3dd; --e3:#84b6d8; --e4:#71bcd6;
+      --chip-ink:#26211c;
+      --shadow:0 2px 10px rgba(0,0,0,.28);
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:16px; line-height:1.55;
+  }
+  [hidden]{ display:none !important; }
+  .wrap{ max-width:720px; margin:0 auto; padding:16px 16px 96px; }
+  header.app{ padding:20px 4px 8px; }
+  header.app h1{ font-size:1.5rem; margin:0 0 4px; letter-spacing:.2px; }
+  header.app p{ margin:0; color:var(--muted); }
+  nav.tabs{ display:flex; gap:8px; margin:18px 0 14px; }
+  nav.tabs button{
+    flex:1; min-height:48px; border:1px solid var(--line); border-radius:999px;
+    background:var(--panel); color:var(--ink); font-size:1rem; font-weight:600;
+    cursor:pointer; box-shadow:var(--shadow);
+  }
+  nav.tabs button.active{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
+  section.panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; box-shadow:var(--shadow); margin-bottom:16px;
+  }
+  h2.section{ font-size:1.05rem; margin:0 0 2px; }
+  p.section-sub{ margin:0 0 14px; color:var(--muted); font-size:.92rem; }
+  fieldset.group{ border:0; padding:0; margin:0 0 16px; }
+  legend.glabel{ font-weight:600; padding:0; margin-bottom:8px; }
+  .scale{ display:grid; gap:8px; }
+  .scale.mood{ grid-template-columns:repeat(5,1fr); }
+  .scale.energy{ grid-template-columns:repeat(4,1fr); }
+  .scale button{
+    min-height:64px; padding:8px 4px; border:2px solid var(--line); border-radius:12px;
+    background:var(--panel); color:var(--ink); font-weight:600; font-size:.95rem;
+    line-height:1.25; cursor:pointer;
+  }
+  .scale button small{ display:block; font-weight:400; font-size:.72rem; color:var(--muted); margin-top:2px; }
+  .scale.mood button.selected[data-mood="1"]{ background:var(--m1); border-color:var(--m1); }
+  .scale.mood button.selected[data-mood="2"]{ background:var(--m2); border-color:var(--m2); }
+  .scale.mood button.selected[data-mood="3"]{ background:var(--m3); border-color:var(--m3); }
+  .scale.mood button.selected[data-mood="4"]{ background:var(--m4); border-color:var(--m4); }
+  .scale.mood button.selected[data-mood="5"]{ background:var(--m5); border-color:var(--m5); }
+  .scale.energy button.selected[data-energy="1"]{ background:var(--e1); border-color:var(--e1); }
+  .scale.energy button.selected[data-energy="2"]{ background:var(--e2); border-color:var(--e2); }
+  .scale.energy button.selected[data-energy="3"]{ background:var(--e3); border-color:var(--e3); }
+  .scale.energy button.selected[data-energy="4"]{ background:var(--e4); border-color:var(--e4); }
+  .scale button.selected{ color:var(--chip-ink); }
+  .scale button.selected small{ color:var(--chip-ink); opacity:.8; }
+  .scale button:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible{
+    outline:3px solid var(--accent); outline-offset:2px;
+  }
+  .prompt-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .prompt-row em{ font-style:italic; color:var(--muted); }
+  button.link{
+    background:none; border:0; color:var(--accent); font:inherit; padding:0;
+    cursor:pointer; text-decoration:underline; min-height:32px;
+  }
+  textarea, input[type="text"], input[type="search"]{
+    width:100%; padding:12px; border:1px solid var(--line); border-radius:10px;
+    background:var(--panel); color:var(--ink); font:inherit;
+  }
+  textarea{ min-height:74px; resize:vertical; }
+  .actions{ display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; align-items:center; }
+  .btn{
+    min-height:48px; padding:10px 18px; border-radius:999px; border:1px solid var(--accent);
+    background:var(--accent-soft); color:var(--accent); font:inherit; font-weight:600; cursor:pointer;
+  }
+  .btn.quiet{ background:var(--panel); border-color:var(--line); color:var(--ink); }
+  .hint{ color:var(--muted); font-size:.88rem; margin:10px 0 0; }
+  .search-row{ display:flex; gap:8px; margin-bottom:12px; }
+  .search-row input{ flex:1; }
+  .entry-list{ margin:0; padding:0; list-style:none; }
+  .day-head{
+    font-weight:700; font-size:.9rem; margin:16px 0 6px; color:var(--muted);
+  }
+  .entry{
+    border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px;
+    background:var(--panel);
+  }
+  .entry .meta{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:.85rem; color:var(--muted); }
+  .entry .text{ margin-top:6px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .chip{
+    display:inline-block; padding:2px 10px; border-radius:999px; font-size:.8rem; font-weight:600;
+    color:var(--chip-ink);
+  }
+  .chip.m1{ background:var(--m1); } .chip.m2{ background:var(--m2); }
+  .chip.m3{ background:var(--m3); } .chip.m4{ background:var(--m4); }
+  .chip.m5{ background:var(--m5); }
+  .chip.e1{ background:var(--e1); } .chip.e2{ background:var(--e2); }
+  .chip.e3{ background:var(--e3); } .chip.e4{ background:var(--e4); }
+  .chip.plain{ background:var(--line); color:var(--muted); }
+  .entry .remove{
+    margin-left:auto; background:none; border:1px solid var(--line); border-radius:8px;
+    font-size:.8rem; padding:4px 10px; color:var(--muted); cursor:pointer; min-height:32px;
+  }
+  .entry .remove.armed{ border-color:var(--danger); color:var(--danger); font-weight:700; }
+  .empty{ color:var(--muted); padding:14px 4px; font-style:italic; }
+  .bar-row{ display:grid; grid-template-columns:7.5em 1fr 2.5em; gap:10px; align-items:center; margin-bottom:7px; }
+  .bar-row .lbl{ font-size:.9rem; }
+  .bar-row .count{ font-size:.85rem; color:var(--muted); text-align:right; }
+  .bar{ height:12px; border-radius:999px; background:var(--line); overflow:hidden; }
+  .bar span{ display:block; height:100%; border-radius:999px; }
+  .gentle-box{
+    background:var(--accent-soft); border-radius:10px; padding:12px 14px; margin:12px 0 4px;
+  }
+  .gentle-box p{ margin:0; }
+  .toast{
+    position:fixed; left:50%; transform:translateX(-50%) translateY(20px);
+    bottom:18px; max-width:92vw; width:max-content;
+    background:var(--ink); color:var(--bg); border-radius:12px; padding:10px 16px;
+    box-shadow:0 6px 20px rgba(0,0,0,.25); display:flex; gap:12px; align-items:center;
+    opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; z-index:5;
+  }
+  .toast.show{ opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0); }
+  .toast button{ color:var(--bg); font-weight:700; min-height:36px; }
+  footer.card-foot{ margin-top:16px; padding:14px 6px; border-top:1px solid var(--line); color:var(--muted); font-size:.88rem; }
+  .brand-note{ margin-top:6px; }
+  .storage-note{
+    background:#f6ead8; border:1px solid #e3cfa8; color:#6a5426; border-radius:10px;
+    padding:10px 12px; margin-bottom:14px; font-size:.9rem;
+  }
+  @media (prefers-color-scheme: dark){ .storage-note{ background:#4a3f22; border-color:#6a5a2e; color:#e8d99a; } }
+  #csv-out{ margin-top:10px; min-height:120px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="app">
+    <h1>Daily Journal Lite</h1>
+    <p>Two taps. One line if you feel like it. That is the whole app.</p>
+  </header>
+
+  <nav class="tabs" aria-label="Sections">
+    <button type="button" data-view="log" class="active">Log today</button>
+    <button type="button" data-view="history">Timeline</button>
+    <button type="button" data-view="week">This week</button>
+  </nav>
+
+  <div id="storage-note" class="storage-note" hidden>
+    Heads-up: this browser is not remembering entries between visits (storage is blocked).
+    Logging still works, and you can use the CSV export to keep a copy. Everything else is unaffected.
+  </div>
+
+  <main>
+    <section id="view-log" aria-labelledby="log-h">
+      <h2 class="section" id="log-h" hidden>Log</h2>
+      <section class="panel" aria-label="Two-tap log">
+        <fieldset class="group">
+          <legend class="glabel">How is your mood?</legend>
+          <div class="scale mood" role="group" aria-label="Mood, from Rough to Great">
+            <button type="button" class="mood-btn" data-mood="1" aria-pressed="false">Rough<small>worst end</small></button>
+            <button type="button" class="mood-btn" data-mood="2" aria-pressed="false">Low<small>dragging</small></button>
+            <button type="button" class="mood-btn" data-mood="3" aria-pressed="false">Okay<small>middle</small></button>
+            <button type="button" class="mood-btn" data-mood="4" aria-pressed="false">Good<small>pretty fine</small></button>
+            <button type="button" class="mood-btn" data-mood="5" aria-pressed="false">Great<small>best end</small></button>
+          </div>
+        </fieldset>
+        <fieldset class="group">
+          <legend class="glabel">How is your energy?</legend>
+          <div class="scale energy" role="group" aria-label="Energy, from Drained to Buzzing">
+            <button type="button" class="energy-btn" data-energy="1" aria-pressed="false">Drained</button>
+            <button type="button" class="energy-btn" data-energy="2" aria-pressed="false">Low</button>
+            <button type="button" class="energy-btn" data-energy="3" aria-pressed="false">Steady</button>
+            <button type="button" class="energy-btn" data-energy="4" aria-pressed="false">Buzzing</button>
+          </div>
+        </fieldset>
+        <p class="hint">Tap mood, then energy: that saves your log. No other steps, no score.</p>
+      </section>
+
+      <section class="panel" aria-label="Optional one-line check-in">
+        <h2 class="section" id="checkin-h">Want to add one line?</h2>
+        <div class="prompt-row">
+          <em>Optional prompt — <span id="prompt-line">Loading a gentle prompt…</span></em>
+          <button type="button" class="link" id="shuffle-prompt">shuffle</button>
+        </div>
+        <textarea id="checkin-text" maxlength="500" aria-labelledby="checkin-h" placeholder="Type a line here — or leave it empty and just two-tap above. Blank is a valid answer."></textarea>
+        <div class="actions">
+          <button type="button" id="save-line" class="btn">Save line only</button>
+        </div>
+        <p class="hint">Prompts are suggestions, not homework. Ignore them freely — checking in without a tag or a line is still journaling.</p>
+      </section>
+    </section>
+
+    <section id="view-history" hidden aria-labelledby="history-h">
+      <h2 class="section" id="history-h">Timeline</h2>
+      <p class="section-sub">No streaks here, no scores. A gap just means you were busy living — come back whenever.</p>
+      <section class="panel" aria-label="Search previous entries">
+        <div class="search-row">
+          <input type="search" id="search-input" placeholder="Search in plain words, e.g. coffee appointment"
+                 aria-label="Search previous entries in plain words">
+          <button type="button" id="search-clear" class="btn quiet">Clear</button>
+        </div>
+        <p class="hint" id="history-count"></p>
+      </section>
+      <section class="panel" aria-label="Your entries">
+        <ul class="entry-list" id="history-list"></ul>
+      </section>
+      <section class="panel" aria-label="Export your entries">
+        <h2 class="section" id="export-h">Take your data with you</h2>
+        <p class="section-sub">A CSV you can open in Excel, Numbers, or Google Sheets. Exporting beats trusting a browser forever.</p>
+        <div class="actions">
+          <button type="button" id="export-csv" class="btn">Download CSV</button>
+          <button type="button" id="copy-csv" class="btn quiet">Copy CSV</button>
+          <button type="button" id="show-csv" class="btn quiet">Show CSV</button>
+        </div>
+        <textarea id="csv-out" hidden readonly aria-label="Your entries as CSV"></textarea>
+      </section>
+    </section>
+
+    <section id="view-week" hidden aria-labelledby="week-h">
+      <h2 class="section" id="week-h">This week, gently</h2>
+      <p class="section-sub">The last 7 days, including today. Information, not homework — no comparisons, no streaks, by design.</p>
+      <section class="panel" aria-label="Weekly summary card">
+        <h2 class="section" id="week-headline" style="font-size:1.2rem"></h2>
+        <p class="section-sub" id="week-days"></p>
+        <div id="mood-bars" aria-label="Mood spread this week"></div>
+        <div id="energy-bars" style="margin-top:14px" aria-label="Energy spread this week"></div>
+        <div class="gentle-box"><p id="week-message"></p></div>
+        <p class="hint" id="week-window"></p>
+      </section>
+      <section class="panel" aria-label="Notes on this summary">
+        <p class="hint" style="margin:0">Week-to-week comparison is deliberately missing. The point is noticing, not performing.</p>
+      </section>
+    </section>
+  </main>
+
+  <footer class="card-foot">
+    <p style="margin:0 0 6px">Privacy: entries live only in this browser's localStorage on this device. Nothing syncs, nothing uploads. Clearing browser data erases entries — export first if you want a copy.</p>
+    <p class="brand-note" style="margin:0">Daily Journal Lite · part of the Asdale Dynamics gentle-tools family · MIT licensed</p>
+  </footer>
+
+</div>
+
+<div class="toast" id="log-toast" role="status" aria-live="polite">
+  <span id="toast-text"></span>
+  <button type="button" class="link" id="toast-undo">Undo</button>
+</div>
+
+<script>
+/* =======================================================================
+   JournalLite core — data + logic only, no DOM here.
+   The region between NODE-TEST-BEGIN and NODE-TEST-END is what the
+   zero-dependency test suite (tests/run-tests.js) loads under Node.
+   ======================================================================= */
+/*NODE-TEST-BEGIN*/
+var JournalLite = (function () {
+  var STORAGE_KEY = 'jl.entries.v1';
+  var MOOD_MAX = 5;
+  var ENERGY_MAX = 4;
+  var MOOD_LABELS = { 1: 'Rough', 2: 'Low', 3: 'Okay', 4: 'Good', 5: 'Great' };
+  var ENERGY_LABELS = { 1: 'Drained', 2: 'Low', 3: 'Steady', 4: 'Buzzing' };
+  var memoryStore = [];
+
+  function ls() {
+    try {
+      if (typeof localStorage !== 'undefined') return localStorage;
+    } catch (e) { /* storage blocked; fall through */ }
+    return null;
+  }
+
+  function readAll() {
+    var s = ls();
+    if (!s) return memoryStore.slice();
+    try {
+      var raw = s.getItem(STORAGE_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function writeAll(arr) {
+    var s = ls();
+    if (!s) {
+      memoryStore = arr; /* session-only fallback, not persisted */
+      return false;
+    }
+    try {
+      s.setItem(STORAGE_KEY, JSON.stringify(arr));
+      return true;
+    } catch (e) {
+      memoryStore = arr; /* keep the session usable even if saving fails */
+      return false;
+    }
+  }
+
+  function pad2(n) {
+    n = String(n);
+    return n.length < 2 ? '0' + n : n;
+  }
+
+  /* Local calendar date (YYYY-MM-DD) — deliberately NOT a UTC conversion,
+     so an entry logged at 11pm local time belongs to that local day. */
+  function todayISO(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  /* Local, spreadsheet-friendly timestamp: YYYY-MM-DD HH:MM:SS */
+  function formatTS(ms) {
+    var d = (ms instanceof Date) ? ms : new Date(ms);
+    return todayISO(d) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+
+  function makeId(ts) {
+    return 'jl_' + ts.toString(36) + '_' +
+      Math.floor(Math.random() * 1296).toString(36) +
+      Math.floor(Math.random() * 1296).toString(36);
+  }
+
+  function resolveLabel(map, name) {
+    if (typeof name !== 'string') return null;
+    var k;
+    for (k in map) {
+      if (map[k].toLowerCase() === name.toLowerCase()) return Number(k);
+    }
+    return null;
+  }
+
+  function normMood(v) {
+    var n = (typeof v === 'string') ? resolveLabel(MOOD_LABELS, v) : v;
+    if (typeof n === 'number' && isFinite(n)) {
+      var i = Math.round(n);
+      if (i >= 1 && i <= MOOD_MAX) return i;
+    }
+    return null;
+  }
+
+  function normEnergy(v) {
+    var n = (typeof v === 'string') ? resolveLabel(ENERGY_LABELS, v) : v;
+    if (typeof n === 'number' && isFinite(n)) {
+      var i = Math.round(n);
+      if (i >= 1 && i <= ENERGY_MAX) return i;
+    }
+    return null;
+  }
+
+  /* Saves one entry. mood/energy/text are each optional but something must
+     be present. Returns { ok, entry } or { ok:false, reason, message }. */
+  function saveEntry(draft, now) {
+    draft = draft || {};
+    var mood = normMood(draft.mood);
+    var energy = normEnergy(draft.energy);
+    var text = (typeof draft.text === 'string') ? draft.text.trim() : '';
+    if (mood === null && energy === null && text === '') {
+      return {
+        ok: false,
+        reason: 'empty',
+        message: 'Nothing to save yet. Tap a mood and an energy, or type a line.'
+      };
+    }
+    var d = now || new Date();
+    var ts = d.getTime();
+    var entry = {
+      id: makeId(ts),
+      ts: ts,
+      date: todayISO(d),
+      mood: mood,
+      energy: energy,
+      text: text
+    };
+    var all = readAll();
+    all.unshift(entry); /* newest first */
+    var persisted = writeAll(all);
+    return { ok: true, entry: entry, persisted: persisted };
+  }
+
+  function getEntries() {
+    return readAll();
+  }
+
+  function getEntryById(id) {
+    var all = readAll();
+    var i;
+    for (i = 0; i < all.length; i++) {
+      if (all[i] && all[i].id === id) return all[i];
+    }
+    return null;
+  }
+
+  function deleteEntry(id) {
+    var all = readAll();
+    var next = all.filter(function (e) { return e && e.id !== id; });
+    writeAll(next);
+    return all.length - next.length;
+  }
+
+  function clearAll() {
+    var s = ls();
+    if (s) {
+      try { s.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+    }
+    memoryStore = [];
+    return true;
+  }
+
+  function moodLabel(v) {
+    return (typeof v === 'number' && MOOD_LABELS[v]) ? MOOD_LABELS[v] : '';
+  }
+
+  function energyLabel(v) {
+    return (typeof v === 'number' && ENERGY_LABELS[v]) ? ENERGY_LABELS[v] : '';
+  }
+
+  /* Plain-word search: every whitespace-separated word in the query must
+     appear (case-insensitively) in the date, note text, mood label, or
+     energy label. No operators, no syntax to learn. */
+  function searchEntries(query, entries) {
+    var list = entries || readAll();
+    var q = String(query == null ? '' : query).trim().toLowerCase();
+    if (q === '') return list.slice();
+    var words = q.split(/\s+/);
+    return list.filter(function (e) {
+      if (!e) return false;
+      var parts = [e.date || '', e.text || ''];
+      var ml = moodLabel(e.mood);
+      var el = energyLabel(e.energy);
+      if (ml) parts.push(ml);
+      if (el) parts.push(el);
+      var hay = parts.join(' ').toLowerCase();
+      var i;
+      for (i = 0; i < words.length; i++) {
+        if (hay.indexOf(words[i]) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  /* The summary window is the trailing 7 days ending with the reference
+     day, in local calendar time. */
+  function weekWindow(ref) {
+    ref = ref || new Date();
+    var end = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate(), 23, 59, 59, 999).getTime();
+    var start = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate() - 6, 0, 0, 0, 0).getTime();
+    return { start: start, end: end };
+  }
+
+  function topOf(tally, values) {
+    var best = 0, winners = [];
+    values.forEach(function (v) {
+      if (tally[v] > best) { best = tally[v]; winners = [v]; }
+      else if (tally[v] > 0 && tally[v] === best) { winners.push(v); }
+    });
+    if (best === 0) return { value: null, count: 0, tie: false };
+    if (winners.length !== 1) return { value: null, count: best, tie: true };
+    return { value: winners[0], count: best, tie: false };
+  }
+
+  /* Gentle, non-judgmental one-liner for the weekly card. */
+  function gentleLine(s) {
+    if (s.count === 0) {
+      return 'No entries this week — and that is completely fine. Zero judgment here.';
+    }
+    if (s.moodLogged === 0) {
+      return 'You left ' + s.count + (s.count === 1 ? ' note' : ' notes') +
+        ' this week without mood tags. Untagged notes count as journaling.';
+    }
+    var lead;
+    if (s.count <= 2) {
+      lead = 'Just a check-in or two this week — small and still real.';
+    } else if (s.topMoodShare !== null && s.topMoodShare >= 0.6) {
+      lead = 'The week leaned ' + s.topMoodLabel + ' overall.';
+    } else {
+      lead = 'A mixed week — moods took turns, the way weeks do.';
+    }
+    return lead + ' No streaks, no comparison, nothing to catch up on.';
+  }
+
+  function weeklySummary(entries, ref) {
+    var list = entries || readAll();
+    var w = weekWindow(ref);
+    var refDate = ref || new Date();
+    var inWeek = list.filter(function (e) {
+      return e && typeof e.ts === 'number' && e.ts >= w.start && e.ts <= w.end;
+    });
+    var moodTally = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    var energyTally = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    var moodLogged = 0;
+    var energyLogged = 0;
+    var activeDates = {};
+    inWeek.forEach(function (e) {
+      if (e.date) activeDates[e.date] = true;
+      if (typeof e.mood === 'number') { moodTally[e.mood]++; moodLogged++; }
+      if (typeof e.energy === 'number') { energyTally[e.energy]++; energyLogged++; }
+    });
+    var topMood = topOf(moodTally, [1, 2, 3, 4, 5]);
+    var share = (topMood.value !== null && moodLogged > 0) ? topMood.count / moodLogged : null;
+    var summary = {
+      count: inWeek.length,
+      daysActive: Object.keys(activeDates).length,
+      moodLogged: moodLogged,
+      energyLogged: energyLogged,
+      moodTally: moodTally,
+      energyTally: energyTally,
+      topMood: topMood.value,
+      topMoodLabel: topMood.value ? MOOD_LABELS[topMood.value] : (moodLogged > 0 ? 'Mixed' : null),
+      topMoodShare: share,
+      topMoodTie: topMood.tie,
+      windowStartISO: todayISO(new Date(w.start)),
+      windowEndISO: todayISO(new Date(w.end)),
+      generatedAtISO: todayISO(refDate),
+      message: ''
+    };
+    summary.message = gentleLine(summary);
+    return summary;
+  }
+
+  function csvCell(v) {
+    if (v === null || v === undefined) v = '';
+    v = String(v);
+    if (/[",\r\n]/.test(v)) {
+      v = '"' + v.replace(/"/g, '""') + '"';
+    }
+    return v;
+  }
+
+  function csvForEntries(entries) {
+    var list = (entries || readAll()).slice().sort(function (a, b) {
+      return (a.ts || 0) - (b.ts || 0);
+    });
+    var rows = [['date', 'created_at', 'mood_value', 'mood', 'energy_value', 'energy', 'note']];
+    list.forEach(function (e) {
+      rows.push([
+        e.date || '',
+        typeof e.ts === 'number' ? formatTS(e.ts) : '',
+        (e.mood === null || e.mood === undefined) ? '' : e.mood,
+        e.mood ? MOOD_LABELS[e.mood] : '',
+        (e.energy === null || e.energy === undefined) ? '' : e.energy,
+        e.energy ? ENERGY_LABELS[e.energy] : '',
+        e.text || ''
+      ]);
+    });
+    return rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n') + '\r\n';
+  }
+
+  return {
+    STORAGE_KEY: STORAGE_KEY,
+    MOOD_LABELS: MOOD_LABELS,
+    ENERGY_LABELS: ENERGY_LABELS,
+    todayISO: todayISO,
+    formatTS: formatTS,
+    saveEntry: saveEntry,
+    getEntries: getEntries,
+    getEntryById: getEntryById,
+    deleteEntry: deleteEntry,
+    clearAll: clearAll,
+    moodLabel: moodLabel,
+    energyLabel: energyLabel,
+    normMood: normMood,
+    normEnergy: normEnergy,
+    searchEntries: searchEntries,
+    weekWindow: weekWindow,
+    weeklySummary: weeklySummary,
+    gentleLine: gentleLine,
+    csvForEntries: csvForEntries,
+    csvCell: csvCell
+  };
+})();
+
+if (typeof globalThis !== 'undefined') globalThis.JournalLite = JournalLite;
+/*NODE-TEST-END*/
+
+/* ===================== UI wiring (browser only) ====================== */
+if (typeof document !== 'undefined') {
+  (function () {
+    var PROMPTS = [
+      'What went okay today, even a little?',
+      'One line for future-you?',
+      'How are you really, in a few words?',
+      'Anything worth noticing about today?',
+      'Sound check: loud, quiet, busy, calm?',
+      'No prompt today — the box below is just yours.'
+    ];
+    var state = {
+      mood: null,
+      energy: null,
+      lastSavedId: null,
+      promptIndex: null,
+      query: ''
+    };
+
+    function $(id) { return document.getElementById(id); }
+
+    var toastTimer = null;
+    function toast(text, allowUndo) {
+      var t = $('log-toast');
+      $('toast-text').textContent = text;
+      $('toast-undo').hidden = !allowUndo;
+      t.classList.add('show');
+      clearTimeout(toastTimer);
+      if (allowUndo) {
+        toastTimer = setTimeout(function () { t.classList.remove('show'); }, 6000);
+      } else {
+        toastTimer = setTimeout(function () { t.classList.remove('show'); }, 3500);
+      }
+    }
+
+    function refreshPicks() {
+      Array.prototype.forEach.call(document.querySelectorAll('.mood-btn'), function (b) {
+        var on = Number(b.getAttribute('data-mood')) === state.mood;
+        b.classList.toggle('selected', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      Array.prototype.forEach.call(document.querySelectorAll('.energy-btn'), function (b) {
+        var on = Number(b.getAttribute('data-energy')) === state.energy;
+        b.classList.toggle('selected', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    function resetLogForm() {
+      state.mood = null;
+      state.energy = null;
+      refreshPicks();
+      $('checkin-text').value = '';
+    }
+
+    function renderAll() {
+      renderHistory(state.query);
+      if (!$('view-week').hidden) renderWeek();
+    }
+
+    function maybeAutoSave() {
+      if (state.mood !== null && state.energy !== null) {
+        var res = JournalLite.saveEntry({
+          mood: state.mood,
+          energy: state.energy,
+          text: $('checkin-text').value
+        });
+        if (res.ok) {
+          state.lastSavedId = res.entry.id;
+          resetLogForm();
+          toast('Saved to your journal.', true);
+          renderAll();
+        } else {
+          toast(res.message, false);
+        }
+      }
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('.mood-btn'), function (b) {
+      b.addEventListener('click', function () {
+        var v = Number(b.getAttribute('data-mood'));
+        state.mood = (state.mood === v) ? null : v;
+        refreshPicks();
+        maybeAutoSave();
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.energy-btn'), function (b) {
+      b.addEventListener('click', function () {
+        var v = Number(b.getAttribute('data-energy'));
+        state.energy = (state.energy === v) ? null : v;
+        refreshPicks();
+        maybeAutoSave();
+      });
+    });
+
+    $('save-line').addEventListener('click', function () {
+      var res = JournalLite.saveEntry({ text: $('checkin-text').value });
+      if (res.ok) {
+        state.lastSavedId = res.entry.id;
+        resetLogForm();
+        toast('Line saved. That counts.', false);
+        renderAll();
+      } else {
+        toast(res.message, false);
+      }
+    });
+
+    $('toast-undo').addEventListener('click', function () {
+      clearTimeout(toastTimer);
+      if (state.lastSavedId) {
+        JournalLite.deleteEntry(state.lastSavedId);
+        state.lastSavedId = null;
+        toast('Entry removed. Nothing lost, nothing owed.', false);
+        renderAll();
+      }
+      $('log-toast').classList.remove('show');
+    });
+
+    function showPrompt(i) {
+      state.promptIndex = ((i % PROMPTS.length) + PROMPTS.length) % PROMPTS.length;
+      $('prompt-line').textContent = PROMPTS[state.promptIndex];
+    }
+    $('shuffle-prompt').addEventListener('click', function () {
+      showPrompt(state.promptIndex === null ? 0 : state.promptIndex + 1);
+    });
+
+    function chip(kind, v) {
+      var span = document.createElement('span');
+      span.className = 'chip ' + kind + v;
+      var label = (kind === 'm' ? 'Mood: ' : 'Energy: ') +
+        (kind === 'm' ? JournalLite.moodLabel(v) : JournalLite.energyLabel(v));
+      span.textContent = label;
+      return span;
+    }
+
+    function attachRemove(btn, id) {
+      var armed = false;
+      var timer = null;
+      btn.addEventListener('click', function () {
+        if (!armed) {
+          armed = true;
+          btn.textContent = 'Remove for sure?';
+          btn.classList.add('armed');
+          timer = setTimeout(function () {
+            armed = false;
+            btn.textContent = 'Remove';
+            btn.classList.remove('armed');
+          }, 3500);
+        } else {
+          clearTimeout(timer);
+          JournalLite.deleteEntry(id);
+          toast('Entry removed.', false);
+          renderAll();
+        }
+      });
+    }
+
+    function renderHistory(query) {
+      state.query = query;
+      var total = JournalLite.getEntries().length;
+      var items = JournalLite.searchEntries(query || '');
+      $('history-count').textContent = total === 0
+        ? 'No entries yet — that is a perfectly fine place to start.'
+        : total + (total === 1 ? ' entry so far' : ' entries so far') +
+          '. Every single one of them counts; none are hard to miss.';
+      var wrap = $('history-list');
+      wrap.textContent = '';
+
+      if (total === 0) {
+        var empty0 = document.createElement('li');
+        empty0.className = 'empty';
+        empty0.textContent = 'When you feel like it, entries land here. No schedule, no expectations.';
+        wrap.appendChild(empty0);
+        return;
+      }
+      if (items.length === 0) {
+        var emptySearch = document.createElement('li');
+        emptySearch.className = 'empty';
+        emptySearch.textContent = 'No entries match those words. Try fewer words, or a mood like "steady".';
+        wrap.appendChild(emptySearch);
+        return;
+      }
+
+      var fmtDay = new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+      var fmtTime = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+      var lastDate = null;
+      var groupUl = null;
+      items.forEach(function (e) {
+        if (e.date !== lastDate) {
+          var head = document.createElement('li');
+          head.className = 'day-head';
+          /* Parse the local date manually; new Date('YYYY-MM-DD') is UTC
+             and can shift the displayed day in negative-offset timezones. */
+          var dp = e.date.split('-');
+          var localDay = (dp.length === 3)
+            ? new Date(Number(dp[0]), Number(dp[1]) - 1, Number(dp[2]))
+            : (typeof e.ts === 'number' ? new Date(e.ts) : null);
+          head.textContent = localDay ? fmtDay.format(localDay) : e.date;
+          wrap.appendChild(head);
+          lastDate = e.date;
+        }
+        var li = document.createElement('li');
+        li.className = 'entry';
+        var meta = document.createElement('div');
+        meta.className = 'meta';
+        var time = document.createElement('span');
+        time.textContent = (typeof e.ts === 'number') ? fmtTime.format(new Date(e.ts)) : '';
+        meta.appendChild(time);
+        if (typeof e.mood === 'number') meta.appendChild(chip('m', e.mood));
+        if (typeof e.energy === 'number') meta.appendChild(chip('e', e.energy));
+        if (typeof e.mood !== 'number' && typeof e.energy !== 'number') {
+          var plain = document.createElement('span');
+          plain.className = 'chip plain';
+          plain.textContent = 'Line only';
+          meta.appendChild(plain);
+        }
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'remove';
+        rm.setAttribute('aria-label', 'Remove this entry');
+        rm.textContent = 'Remove';
+        attachRemove(rm, e.id);
+        meta.appendChild(rm);
+        li.appendChild(meta);
+        if (e.text) {
+          var p = document.createElement('div');
+          p.className = 'text';
+          p.textContent = e.text;
+          li.appendChild(p);
+        }
+        wrap.appendChild(li);
+      });
+    }
+
+    $('search-input').addEventListener('input', function () {
+      renderHistory($('search-input').value);
+    });
+    $('search-clear').addEventListener('click', function () {
+      $('search-input').value = '';
+      renderHistory('');
+    });
+
+    function currentCsv() {
+      return JournalLite.csvForEntries(JournalLite.getEntries());
+    }
+
+    function revealCsv(text, message) {
+      var out = $('csv-out');
+      out.hidden = false;
+      out.textContent = text;
+      toast(message, false);
+    }
+
+    $('export-csv').addEventListener('click', function () {
+      if (JournalLite.getEntries().length === 0) {
+        toast('Nothing to export yet — entries will land here as you log them.', false);
+        return;
+      }
+      var csv = currentCsv();
+      try {
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'daily-journal-lite-export.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+        toast('CSV downloaded. Nice — a backup is a gentle act of self-care.', false);
+      } catch (err) {
+        revealCsv(csv, 'Download was blocked here — CSV is shown below: copy it out.');
+      }
+    });
+
+    $('copy-csv').addEventListener('click', function () {
+      if (JournalLite.getEntries().length === 0) {
+        toast('Nothing to copy yet.', false);
+        return;
+      }
+      var csv = currentCsv();
+      var fallback = function () { revealCsv(csv, 'Clipboard was blocked here — CSV is shown below: select and copy.'); };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(csv).then(function () {
+            toast('CSV copied to the clipboard.', false);
+          }, fallback);
+        } else {
+          fallback();
+        }
+      } catch (e) {
+        fallback();
+      }
+    });
+
+    $('show-csv').addEventListener('click', function () {
+      var out = $('csv-out');
+      if (JournalLite.getEntries().length === 0) {
+        toast('Nothing to show yet.', false);
+        return;
+      }
+      if (out.hidden) {
+        out.hidden = false;
+        out.textContent = currentCsv();
+      } else {
+        out.hidden = true;
+        out.textContent = '';
+      }
+    });
+
+    function renderWeek() {
+      var s = JournalLite.weeklySummary(JournalLite.getEntries(), new Date());
+      $('week-headline').textContent = s.count === 1
+        ? '1 check-in this week'
+        : s.count + ' check-ins this week';
+      $('week-days').textContent = s.count === 0
+        ? 'And a week with zero check-ins is still a fine, ordinary week.'
+        : 'on ' + s.daysActive + (s.daysActive === 1 ? ' different day' : ' different days');
+      renderBars($('mood-bars'), s.moodTally, [1, 2, 3, 4, 5], JournalLite.MOOD_LABELS, 'm');
+      renderBars($('energy-bars'), s.energyTally, [1, 2, 3, 4], JournalLite.ENERGY_LABELS, 'e');
+      $('week-message').textContent = s.message;
+      $('week-window').textContent = 'Window: ' + s.windowStartISO + ' to ' + s.windowEndISO +
+        ' (local days). Lower bars simply mean fewer entries felt that way.';
+    }
+
+    function renderBars(container, tally, values, labels, chipKind) {
+      container.textContent = '';
+      var max = 0;
+      values.forEach(function (v) { if (tally[v] > max) max = tally[v]; });
+      values.forEach(function (v) {
+        if (tally[v] === 0) return;
+        var row = document.createElement('div');
+        row.className = 'bar-row';
+        var lbl = document.createElement('span');
+        lbl.className = 'lbl';
+        lbl.textContent = labels[v];
+        row.appendChild(lbl);
+        var bar = document.createElement('div');
+        bar.className = 'bar';
+        var fill = document.createElement('span');
+        fill.style.width = Math.round((tally[v] / max) * 100) + '%';
+        fill.style.background = 'var(--' + chipKind + v + ')';
+        bar.appendChild(fill);
+        row.appendChild(bar);
+        var count = document.createElement('span');
+        count.className = 'count';
+        count.textContent = String(tally[v]);
+        row.appendChild(count);
+        container.appendChild(row);
+      });
+    }
+
+    function switchView(name) {
+      ['log', 'history', 'week'].forEach(function (v) {
+        $('view-' + v).hidden = (v !== name);
+        var tab = document.querySelector('nav.tabs button[data-view="' + v + '"]');
+        if (tab) tab.classList.toggle('active', v === name);
+      });
+      if (name === 'history') renderHistory(state.query);
+      if (name === 'week') renderWeek();
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('nav.tabs button'), function (b) {
+      b.addEventListener('click', function () {
+        switchView(b.getAttribute('data-view'));
+      });
+    });
+
+    /* Storage health check (private modes can silently forget). */
+    try {
+      localStorage.setItem('jl.healthcheck', '1');
+      localStorage.removeItem('jl.healthcheck');
+    } catch (e) {
+      $('storage-note').hidden = false;
+    }
+
+    showPrompt(Math.floor(Math.random() * PROMPTS.length));
+    renderHistory('');
+  })();
+}
+</script>
+</body>
+</html>
